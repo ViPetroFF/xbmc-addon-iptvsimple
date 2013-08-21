@@ -87,10 +87,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\src\iptvsimple\client.cpp" />
+    <ClCompile Include="..\..\..\src\iptvsimple\netstream.cpp" />
     <ClCompile Include="..\..\..\src\iptvsimple\PVRIptvData.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\src\iptvsimple\client.h" />
+    <ClInclude Include="..\..\..\src\iptvsimple\netstream.h" />
     <ClInclude Include="..\..\..\src\iptvsimple\PVRIptvData.h" />
   </ItemGroup>
   <ItemGroup>

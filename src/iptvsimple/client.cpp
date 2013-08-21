@@ -37,8 +37,7 @@ using namespace ADDON;
 bool           m_bCreated       = false;
 ADDON_STATUS   m_CurStatus      = ADDON_STATUS_UNKNOWN;
 PVRIptvData   *m_data           = NULL;
-bool           m_bIsPlaying     = false;
-PVRIptvChannel m_currentChannel;
+//PVRIptvChannel m_currentChannel;
 
 /* User adjustable settings are saved here.
  * Default values are defined inside client.h
@@ -274,6 +273,7 @@ PVR_ERROR GetAddonCapabilities(PVR_ADDON_CAPABILITIES* pCapabilities)
   pCapabilities->bSupportsRadio           = true;
   pCapabilities->bSupportsChannelGroups   = true;
   pCapabilities->bSupportsRecordings      = false;
+  pCapabilities->bHandlesInputStream      = true;
 
   return PVR_ERROR_NO_ERROR;
 }
@@ -331,13 +331,13 @@ bool OpenLiveStream(const PVR_CHANNEL &channel)
 {
   if (m_data)
   {
-    CloseLiveStream();
+    //CloseLiveStream();
 
-    if (m_data->GetChannel(channel, m_currentChannel))
-    {
-      m_bIsPlaying = true;
-      return true;
-    }
+    //if (m_data->GetChannel(channel, m_currentChannel))
+    //{
+      //return true;
+    //}
+    return m_data->OpenLiveStream(channel);
   }
 
   return false;
@@ -345,19 +345,60 @@ bool OpenLiveStream(const PVR_CHANNEL &channel)
 
 void CloseLiveStream(void)
 {
-  m_bIsPlaying = false;
+  if (m_data)
+    m_data->CloseLiveStream();
+}
+
+bool SwitchChannel(const PVR_CHANNEL &channelinfo)
+{
+  if (!m_data)
+    return false;
+  else
+    return m_data->SwitchChannel(channelinfo);
+}
+
+int ReadLiveStream(unsigned char *pBuffer, unsigned int iBufferSize)
+{
+  if (!m_data)
+    return 0;
+  else
+    return m_data->ReadLiveStream(pBuffer, iBufferSize);
 }
 
 int GetCurrentClientChannel(void)
 {
-  return m_currentChannel.iUniqueId;
+  //return m_currentChannel.iUniqueId;
+  if (!m_data)
+    return 0;
+  else
+    return m_data->GetCurrentClientChannel();
 }
 
-bool SwitchChannel(const PVR_CHANNEL &channel)
-{
-  CloseLiveStream();
+//bool SwitchChannel(const PVR_CHANNEL &channel)
+//{
+  //CloseLiveStream();
 
-  return OpenLiveStream(channel);
+  //return OpenLiveStream(channel);
+//}
+
+bool CanPauseStream(void)
+{
+  if (!m_data)
+    return false;
+  else
+    return m_data->CanPauseStream();
+}
+
+void PauseStream(bool bPaused)
+{
+}
+
+bool CanSeekStream(void)
+{
+  if (!m_data)
+    return false;
+  else
+    return m_data->CanPauseStream();
 }
 
 PVR_ERROR GetStreamProperties(PVR_STREAM_PROPERTIES* pProperties)
@@ -398,8 +439,9 @@ PVR_ERROR SignalStatus(PVR_SIGNAL_STATUS &signalStatus)
 }
 
 /** UNUSED API FUNCTIONS */
-const char * GetLiveStreamURL(const PVR_CHANNEL &channel)  { return ""; }
-bool CanPauseStream(void) { return false; }
+//const char * GetLiveStreamURL(const PVR_CHANNEL &channel)  { return ""; }
+const char * GetLiveStreamURL(const PVR_CHANNEL &channel)  { return NULL; }
+//bool CanPauseStream(void) { return false; }
 int GetRecordingsAmount(void) { return -1; }
 PVR_ERROR GetRecordings(ADDON_HANDLE handle) { return PVR_ERROR_NOT_IMPLEMENTED; }
 PVR_ERROR DialogChannelScan(void) { return PVR_ERROR_NOT_IMPLEMENTED; }
@@ -417,7 +459,7 @@ long long PositionRecordedStream(void) { return -1; }
 long long LengthRecordedStream(void) { return 0; }
 void DemuxReset(void) {}
 void DemuxFlush(void) {}
-int ReadLiveStream(unsigned char *pBuffer, unsigned int iBufferSize) { return 0; }
+//int ReadLiveStream(unsigned char *pBuffer, unsigned int iBufferSize) { return 0; }
 long long SeekLiveStream(long long iPosition, int iWhence /* = SEEK_SET */) { return -1; }
 long long PositionLiveStream(void) { return -1; }
 long long LengthLiveStream(void) { return -1; }
@@ -434,8 +476,8 @@ PVR_ERROR UpdateTimer(const PVR_TIMER &timer) { return PVR_ERROR_NOT_IMPLEMENTED
 void DemuxAbort(void) {}
 DemuxPacket* DemuxRead(void) { return NULL; }
 unsigned int GetChannelSwitchDelay(void) { return 0; }
-void PauseStream(bool bPaused) {}
-bool CanSeekStream(void) { return false; }
+//void PauseStream(bool bPaused) {}
+//bool CanSeekStream(void) { return false; }
 bool SeekTime(int,bool,double*) { return false; }
 void SetSpeed(int) {};
 }

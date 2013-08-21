@@ -57,6 +57,7 @@ struct PVRIptvChannel
   int         iChannelNumber;
   int         iEncryptionSystem;
   int         iTvgShift;
+  bool        bIsTcpTransport;
   std::string strChannelName;
   std::string strLogoPath;
   std::string strStreamURL;
@@ -72,6 +73,11 @@ struct PVRIptvChannelGroup
   std::string       strGroupName;
   std::vector<int>  members;
 };
+
+namespace LibNetStream
+{
+	class IStream;
+}
 
 class PVRIptvData : public PLATFORM::CThread
 {
@@ -90,6 +96,14 @@ public:
   virtual void      ReloadPlayList(const char * strNewPath);
   virtual void      ReloadEPG(const char * strNewPath);
 
+  virtual bool OpenLiveStream(const PVR_CHANNEL &channelinfo);
+  virtual void CloseLiveStream();
+  virtual bool SwitchChannel(const PVR_CHANNEL &channelinfo);
+  virtual int ReadLiveStream(unsigned char *pBuffer, unsigned int iBufferSize);
+  virtual int GetCurrentClientChannel();
+  virtual bool CanPauseStream();
+
+
 protected:
   virtual bool                 LoadPlayList(void);
   virtual bool                 LoadEPG(time_t iStart, time_t iEnd);
@@ -103,7 +117,7 @@ protected:
   virtual int                  GetCachedFileContents(const std::string &strCachedName, const std::string &strFilePath, std::string &strContent);
   virtual void                 ApplyChannelsLogos();
   virtual CStdString           ReadMarkerValue(std::string &strLine, const char * strMarkerName);
-  virtual int                  GetChannelId(const char * strChannelName, const char * strStreamUrl);
+  virtual int                  GetChannelId(const char * strChannelName, const char * strStreamUrl, unsigned short wChannelId);
 
 protected:
   virtual void *Process(void);
@@ -120,4 +134,6 @@ private:
   std::vector<PVRIptvChannelGroup>  m_groups;
   std::vector<PVRIptvChannel>       m_channels;
   std::vector<PVRIptvEpgChannel>    m_epg;
+  PVRIptvChannel                    m_currentChannel;
+  LibNetStream::IStream*            m_currentStream;
 };

@@ -28,6 +28,7 @@
 #include <map>
 #include "zlib.h"
 #include "rapidxml/rapidxml.hpp"
+#include "netstream.h"
 #include "PVRIptvData.h"
 
 #define M3U_START_MARKER        "#EXTM3U"
@@ -78,6 +79,7 @@ PVRIptvData::PVRIptvData(void)
   m_bTSOverride   = g_bTSOverride;
   m_iLastStart    = 0;
   m_iLastEnd      = 0;
+  m_currentStream = NULL;
 
   m_bEGPLoaded = false;
 
@@ -450,7 +452,7 @@ bool PVRIptvData::LoadPlayList(void)
     else if (strLine[0] != '#')
     {
       PVRIptvChannel channel;
-      channel.iUniqueId         = GetChannelId(tmpChannel.strChannelName.c_str(), strLine);
+      channel.iUniqueId         = GetChannelId(tmpChannel.strChannelName.c_str(), strLine, (unsigned short)(iChannelIndex + 1));
       channel.iChannelNumber    = iChannelNum++;
       channel.strTvgId          = tmpChannel.strTvgId;
       channel.strChannelName    = tmpChannel.strChannelName;
@@ -460,6 +462,12 @@ bool PVRIptvData::LoadPlayList(void)
       channel.bRadio            = tmpChannel.bRadio;
       channel.strStreamURL      = strLine;
       channel.iEncryptionSystem = 0;
+	  channel.bIsTcpTransport = false;
+
+		if(channel.strStreamURL.length() >= 6 && "http:" == channel.strStreamURL.substr(0,5))
+		{
+			channel.bIsTcpTransport = true;
+		}
 
       if (iCurrentGroupId > 0) 
       {
@@ -512,8 +520,9 @@ PVR_ERROR PVRIptvData::GetChannels(ADDON_HANDLE handle, bool bRadio)
       xbmcChannel.bIsRadio          = channel.bRadio;
       xbmcChannel.iChannelNumber    = channel.iChannelNumber;
       strncpy(xbmcChannel.strChannelName, channel.strChannelName.c_str(), sizeof(xbmcChannel.strChannelName) - 1);
-      strncpy(xbmcChannel.strStreamURL, channel.strStreamURL.c_str(), sizeof(xbmcChannel.strStreamURL) - 1);
+      //strncpy(xbmcChannel.strStreamURL, channel.strStreamURL.c_str(), sizeof(xbmcChannel.strStreamURL) - 1);
       xbmcChannel.iEncryptionSystem = channel.iEncryptionSystem;
+	  PVR_STRCPY(xbmcChannel.strInputFormat, "video/x-mpegts");
       strncpy(xbmcChannel.strIconPath, channel.strLogoPath.c_str(), sizeof(xbmcChannel.strIconPath) - 1);
       xbmcChannel.bIsHidden         = false;
 
@@ -526,18 +535,22 @@ PVR_ERROR PVRIptvData::GetChannels(ADDON_HANDLE handle, bool bRadio)
 
 bool PVRIptvData::GetChannel(const PVR_CHANNEL &channel, PVRIptvChannel &myChannel)
 {
-  for (unsigned int iChannelPtr = 0; iChannelPtr < m_channels.size(); iChannelPtr++)
+  int iUniqueId = (channel.iUniqueId & 0x0000FFFF);
+  //for (unsigned int iChannelPtr = 0; iChannelPtr < m_channels.size(); iChannelPtr++)
+  if(iUniqueId > 0 && iUniqueId <= m_channels.size())
   {
-    PVRIptvChannel &thisChannel = m_channels.at(iChannelPtr);
+    //PVRIptvChannel &thisChannel = m_channels.at(iChannelPtr);
+    PVRIptvChannel& thisChannel = m_channels.at(iUniqueId-1);
     if (thisChannel.iUniqueId == (int) channel.iUniqueId)
     {
-      myChannel.iUniqueId         = thisChannel.iUniqueId;
-      myChannel.bRadio            = thisChannel.bRadio;
-      myChannel.iChannelNumber    = thisChannel.iChannelNumber;
-      myChannel.iEncryptionSystem = thisChannel.iEncryptionSystem;
-      myChannel.strChannelName    = thisChannel.strChannelName;
-      myChannel.strLogoPath       = thisChannel.strLogoPath;
-      myChannel.strStreamURL      = thisChannel.strStreamURL;
+      //myChannel.iUniqueId         = thisChannel.iUniqueId;
+      //myChannel.bRadio            = thisChannel.bRadio;
+      //myChannel.iChannelNumber    = thisChannel.iChannelNumber;
+      //myChannel.iEncryptionSystem = thisChannel.iEncryptionSystem;
+      //myChannel.strChannelName    = thisChannel.strChannelName;
+      //myChannel.strLogoPath       = thisChannel.strLogoPath;
+      //myChannel.strStreamURL      = thisChannel.strStreamURL;
+      myChannel = thisChannel;
 
       return true;
     }
@@ -653,6 +666,81 @@ PVR_ERROR PVRIptvData::GetEPGForChannel(ADDON_HANDLE handle, const PVR_CHANNEL &
   }
 
   return PVR_ERROR_NO_ERROR;
+}
+
+bool PVRIptvData::OpenLiveStream(const PVR_CHANNEL &channelinfo)
+{
+	bool bSuccess = false;
+
+	if (GetChannel(channelinfo, m_currentChannel))
+    {
+		XBMC->Log(LOG_DEBUG, "OpenLiveStream(%d:%s) (oid=%d)",
+			m_currentChannel.iChannelNumber, m_currentChannel.strChannelName.c_str(), m_currentChannel.iUniqueId);
+
+		m_currentStream = LibNetStream::INetStreamFactory::NewStream(m_currentChannel.strStreamURL);
+
+		bSuccess = (NULL != m_currentStream);
+    }
+
+	return bSuccess;
+}
+
+void PVRIptvData::CloseLiveStream()
+{
+	if(m_currentChannel.iUniqueId)
+	{
+		m_currentChannel.iUniqueId = 0;
+		m_currentChannel.strStreamURL.clear();
+
+		if(m_currentStream)
+		{
+			m_currentStream->Release();
+			m_currentStream = NULL;
+		}
+	}
+}
+
+bool PVRIptvData::SwitchChannel(const PVR_CHANNEL &channelinfo)
+{
+	bool bSuccess = true;
+	// if we're already on the correct channel, then dont do anything
+	if (((int)channelinfo.iUniqueId) != m_currentChannel.iUniqueId)
+	{
+		// open new stream
+		CloseLiveStream();
+		bSuccess = OpenLiveStream(channelinfo);
+	}
+
+	return bSuccess;
+}
+
+int PVRIptvData::ReadLiveStream(unsigned char *pBuffer, unsigned int iBufferSize)
+{
+	int iRead = -1;
+
+	if(m_currentStream)
+	{
+		//XBMC->Log(LOG_DEBUG, "%s - iBufferSize: %u", __FUNCTION__, iBufferSize);
+		iRead = 0;
+		ULONG ulRead;
+		HRESULT hr = m_currentStream->Read(pBuffer, static_cast<ULONG>(iBufferSize), &ulRead);
+		if(SUCCEEDED(hr))
+		{
+			iRead = static_cast<int>(ulRead);
+		}
+	}
+
+	return iRead;
+}
+
+int PVRIptvData::GetCurrentClientChannel()
+{
+	return m_currentChannel.iUniqueId;
+}
+
+bool PVRIptvData::CanPauseStream()
+{
+	return m_currentChannel.bIsTcpTransport;
 }
 
 int PVRIptvData::GetFileContents(CStdString& url, std::string &strContent)
@@ -973,7 +1061,7 @@ CStdString PVRIptvData::ReadMarkerValue(std::string &strLine, const char* strMar
   return std::string("");
 }
 
-int PVRIptvData::GetChannelId(const char * strChannelName, const char * strStreamUrl) 
+int PVRIptvData::GetChannelId(const char * strChannelName, const char * strStreamUrl, unsigned short wChannelId)
 {
   std::string concat(strChannelName);
   concat.append(strStreamUrl);
@@ -982,7 +1070,7 @@ int PVRIptvData::GetChannelId(const char * strChannelName, const char * strStrea
   int iId = 0;
   int c;
   while (c = *strString++)
-    iId = ((iId << 5) + iId) + c; /* iId * 33 + c */
+    iId = (short int)(((iId << 5) + iId) + c); /* iId * 33 + c */
 
-  return abs(iId);
+  return ((abs(iId) << 16)|(int)wChannelId);
 }
